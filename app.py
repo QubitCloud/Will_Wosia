@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file
+from flask import Flask, render_template, request, jsonify, send_file
 import json, os, uuid, io
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
@@ -6,339 +6,305 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 app = Flask(__name__)
 app.secret_key = "wosia-tz-2024"
 
-SUBMISSIONS_DIR = "submissions"
-os.makedirs(SUBMISSIONS_DIR, exist_ok=True)
+FOLDA_HIFADHI = "submissions"
+os.makedirs(FOLDA_HIFADHI, exist_ok=True)
 
 
 @app.route("/")
-def index():
+def ukurasa_nyumbani():
     return render_template("index.html")
 
 
-@app.route("/form")
-def form():
+@app.route("/fomu")
+def ukurasa_fomu():
     return render_template("form.html")
 
 
-@app.route("/submit", methods=["POST"])
-def submit():
+@app.route("/tuma", methods=["POST"])
+def pokea_fomu():
     try:
         data = request.get_json()
-        ref_id = str(uuid.uuid4())[:8].upper()
-        timestamp = datetime.now().isoformat()
-        record = {"ref_id": ref_id, "submitted_at": timestamp, "data": data}
-        filepath = os.path.join(SUBMISSIONS_DIR, f"will_{ref_id}.json")
-        with open(filepath, "w") as f:
-            json.dump(record, f, indent=2, ensure_ascii=False)
-        return jsonify({"success": True, "ref_id": ref_id})
+        kumbukumbu = str(uuid.uuid4())[:8].upper()
+        wakati = datetime.now().isoformat()
+        rekodi = {"ref_id": kumbukumbu, "submitted_at": wakati, "data": data}
+        njia = os.path.join(FOLDA_HIFADHI, f"wosia_{kumbukumbu}.json")
+        with open(njia, "w") as f:
+            json.dump(rekodi, f, indent=2, ensure_ascii=False)
+        return jsonify({"mafanikio": True, "kumbukumbu": kumbukumbu})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"mafanikio": False, "kosa": str(e)}), 500
 
 
-@app.route("/review/<ref_id>")
-def review(ref_id):
-    filepath = os.path.join(SUBMISSIONS_DIR, f"will_{ref_id}.json")
-    if not os.path.exists(filepath):
-        return "Record not found", 404
-    with open(filepath) as f:
-        record = json.load(f)
-    return render_template("review.html", record=record)
+@app.route("/mapitio/<kumbukumbu>")
+def ukurasa_mapitio(kumbukumbu):
+    njia = os.path.join(FOLDA_HIFADHI, f"wosia_{kumbukumbu}.json")
+    if not os.path.exists(njia):
+        return "Rekodi haikupatikana", 404
+    with open(njia) as f:
+        rekodi = json.load(f)
+    return render_template("review.html", record=rekodi)
 
 
-@app.route("/pdf/<ref_id>")
-def generate_pdf(ref_id):
-    filepath = os.path.join(SUBMISSIONS_DIR, f"will_{ref_id}.json")
-    if not os.path.exists(filepath):
-        return "Record not found", 404
-    with open(filepath) as f:
-        record = json.load(f)
-
+@app.route("/pdf/<kumbukumbu>")
+def tengeneza_pdf(kumbukumbu):
+    njia = os.path.join(FOLDA_HIFADHI, f"wosia_{kumbukumbu}.json")
+    if not os.path.exists(njia):
+        return "Rekodi haikupatikana", 404
+    with open(njia) as f:
+        rekodi = json.load(f)
     buffer = io.BytesIO()
-    build_will_pdf(record, buffer)
+    jenga_pdf_wosia(rekodi, buffer)
     buffer.seek(0)
-
     return send_file(
         buffer,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=f"Wosia_{ref_id}.pdf"
+        download_name=f"Wosia_{kumbukumbu}.pdf"
     )
 
 
-# ─── PDF BUILDER ────────────────────────────────────────────────────────────
+# ─── TENGENEZA PDF ──────────────────────────────────────────────────────────
 
-RUST   = colors.Color(0.545, 0.145, 0)
-GOLD   = colors.Color(0.722, 0.525, 0.043)
-INK    = colors.Color(0.102, 0.063, 0.031)
-MID    = colors.Color(0.420, 0.361, 0.243)
-LIGHT  = colors.Color(0.961, 0.941, 0.910)
-BORDER = colors.Color(0.784, 0.722, 0.604)
+RANGI_RUST   = colors.Color(0.545, 0.145, 0)
+RANGI_DHAHABU = colors.Color(0.722, 0.525, 0.043)
+RANGI_DHAHABU_LT = colors.Color(0.831, 0.627, 0.090)
+RANGI_INK    = colors.Color(0.102, 0.063, 0.031)
+RANGI_MID    = colors.Color(0.420, 0.361, 0.243)
+RANGI_NYEPESI = colors.Color(0.961, 0.941, 0.910)
+RANGI_MIPAKA = colors.Color(0.784, 0.722, 0.604)
 
-def build_will_pdf(record, buffer):
-    d   = record["data"]
-    t   = d["testator"]
-    ref = record["ref_id"]
-    sub = record["submitted_at"][:10]
+def jenga_pdf_wosia(rekodi, buffer):
+    d   = rekodi["data"]
+    m   = d["mwandishi"]
+    ref = rekodi["ref_id"]
+    tar = rekodi["submitted_at"][:10]
+
+    jina_kamili = f"{m.get('fname','')} {m.get('mname','')} {m.get('lname','')}".strip()
 
     doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
+        buffer, pagesize=A4,
         leftMargin=2.5*cm, rightMargin=2.5*cm,
         topMargin=2*cm, bottomMargin=2*cm,
-        title=f"Wosia wa {t.get('fname','')} {t.get('lname','')}",
-        author="Wosia Wangu System — Tanzania"
+        title=f"Wosia wa {jina_kamili}",
+        author="Wosia Wangu — Tanzania"
     )
+    upana = A4[0] - 5*cm
 
-    W = A4[0] - 5*cm  # usable width
+    sty = getSampleStyleSheet()
+    def ST(jina, **kw):
+        return ParagraphStyle(jina, parent=sty["Normal"], **kw)
 
-    styles = getSampleStyleSheet()
-    def S(name, **kw):
-        base = styles["Normal"]
-        return ParagraphStyle(name, parent=base, **kw)
+    s_kichwa  = ST("sk", fontName="Times-Bold",     fontSize=18, textColor=RANGI_RUST,      spaceAfter=4,  alignment=TA_CENTER)
+    s_chini   = ST("sc", fontName="Times-Italic",   fontSize=10, textColor=RANGI_MID,       spaceAfter=2,  alignment=TA_CENTER)
+    s_ref     = ST("sr", fontName="Helvetica",      fontSize=8,  textColor=RANGI_MID,       spaceAfter=12, alignment=TA_CENTER)
+    s_sehemu  = ST("ss", fontName="Times-Bold",     fontSize=12, textColor=RANGI_RUST,      spaceBefore=14, spaceAfter=4)
+    s_lebo    = ST("sl", fontName="Helvetica-Bold", fontSize=7.5,textColor=RANGI_MID,       spaceAfter=1,  leading=10)
+    s_thamani = ST("st", fontName="Helvetica",      fontSize=9.5,textColor=RANGI_INK,       spaceAfter=6,  leading=13)
+    s_mwili   = ST("sm", fontName="Helvetica",      fontSize=9,  textColor=RANGI_INK,       spaceAfter=4,  leading=13)
+    s_kisheria= ST("sh", fontName="Helvetica-Oblique", fontSize=7.5, textColor=RANGI_MID,   spaceAfter=3,  leading=11)
+    s_saini   = ST("si", fontName="Helvetica",      fontSize=7.5,textColor=RANGI_MID,       alignment=TA_CENTER)
 
-    sTitle  = S("sTitle",  fontName="Times-Bold",   fontSize=18, textColor=RUST,  spaceAfter=4,  alignment=TA_CENTER)
-    sSub    = S("sSub",    fontName="Times-Italic",  fontSize=10, textColor=MID,   spaceAfter=2,  alignment=TA_CENTER)
-    sRef    = S("sRef",    fontName="Helvetica",     fontSize=8,  textColor=MID,   spaceAfter=12, alignment=TA_CENTER)
-    sSecHd  = S("sSecHd",  fontName="Times-Bold",   fontSize=12, textColor=RUST,  spaceBefore=14, spaceAfter=4)
-    sLabel  = S("sLabel",  fontName="Helvetica-Bold",fontSize=7.5,textColor=MID,   spaceAfter=1, leading=10)
-    sVal    = S("sVal",    fontName="Helvetica",     fontSize=9.5,textColor=INK,   spaceAfter=6, leading=13)
-    sBody   = S("sBody",   fontName="Helvetica",     fontSize=9,  textColor=INK,   spaceAfter=4, leading=13)
-    sLegal  = S("sLegal",  fontName="Helvetica-Oblique", fontSize=7.5, textColor=MID, spaceAfter=3, leading=11)
-    sSigLbl = S("sSigLbl", fontName="Helvetica",    fontSize=7.5,textColor=MID,   alignment=TA_CENTER)
+    hadithi = []
 
-    story = []
+    # ── KICHWA ────────────────────────────────────────────
+    hadithi.append(Paragraph("HATI YA WOSIA WA MWISHO", s_kichwa))
+    hadithi.append(Paragraph("Imetolewa kwa mujibu wa Sheria ya Mirathi, Cap. 865 — Jamhuri ya Muungano wa Tanzania", s_chini))
+    hadithi.append(Paragraph(f"Namba ya Kumbukumbu: <b>{ref}</b>  |  Tarehe ya Kusajiliwa: {tar}", s_ref))
+    hadithi.append(HRFlowable(width=upana, thickness=1.5, color=RANGI_RUST, spaceAfter=10))
 
-    # ── HEADER ──────────────────────────────────────────────
-    story.append(Paragraph("HATI YA WOSIA WA MWISHO", sTitle))
-    story.append(Paragraph("Last Will and Testament", sSub))
-    story.append(Paragraph(f"Nambari ya Kumbukumbu / Reference No: <b>{ref}</b>  |  Tarehe / Date: {sub}", sRef))
-    story.append(HRFlowable(width=W, thickness=1.5, color=RUST, spaceAfter=10))
-
-    # ── OPENING DECLARATION ─────────────────────────────────
-    fname = t.get('fname',''); mname = t.get('mname',''); lname = t.get('lname','')
-    full  = f"{fname} {mname} {lname}".strip()
-    nid   = t.get('nid','_______________')
-    addr  = t.get('address','_______________')
-
-    story.append(Paragraph(
-        f"Mimi, <b>{full}</b>, mwenye Kitambulisho Namba <b>{nid}</b>, mwenye makazi "
-        f"katika <b>{addr}</b>, nikiwa na akili timamu na uwezo wa kisheria, natoa Wosia "
-        f"huu wa Mwisho na kufuta wosia wote wa awali.",
-        sBody
+    # ── TAMKO LA AWALI ────────────────────────────────────
+    nida  = m.get('nid','_______________')
+    anwani = m.get('anwani','_______________')
+    hadithi.append(Paragraph(
+        f"Mimi, <b>{jina_kamili}</b>, mwenye Kitambulisho Namba <b>{nida}</b>, "
+        f"mwenye makazi katika <b>{anwani}</b>, nikiwa na akili timamu na uwezo kamili wa "
+        f"kisheria, natoa Wosia huu wa Mwisho na kufuta wosia na maagizo yote ya awali "
+        f"niliyowahi kutoa.",
+        s_mwili
     ))
-    story.append(Paragraph(
-        f"I, <b>{full}</b>, holding National ID No. <b>{nid}</b>, residing at "
-        f"<b>{addr}</b>, being of sound mind and legal capacity, hereby make this Last "
-        f"Will and Testament and revoke all prior wills.",
-        sBody
-    ))
-    story.append(Spacer(1, 6))
+    hadithi.append(Spacer(1, 6))
 
-    def section(title_sw, title_en):
-        story.append(HRFlowable(width=W, thickness=0.5, color=BORDER, spaceBefore=6, spaceAfter=0))
-        story.append(Paragraph(f"{title_sw} / {title_en}", sSecHd))
+    def sehemu(kichwa):
+        hadithi.append(HRFlowable(width=upana, thickness=0.5, color=RANGI_MIPAKA, spaceBefore=6, spaceAfter=0))
+        hadithi.append(Paragraph(kichwa, s_sehemu))
 
-    def row(label, value):
-        if value and value.strip():
-            story.append(Paragraph(label.upper(), sLabel))
-            story.append(Paragraph(str(value), sVal))
+    def safu(lebo, thamani):
+        if thamani and str(thamani).strip():
+            hadithi.append(Paragraph(lebo.upper(), s_lebo))
+            hadithi.append(Paragraph(str(thamani), s_thamani))
 
-    # ── SECTION 1: TESTATOR ─────────────────────────────────
-    section("TAARIFA ZA MWANDISHI", "TESTATOR INFORMATION")
-    data_rows = [
-        ("Jina Kamili / Full Name", full),
-        ("Tarehe ya Kuzaliwa / Date of Birth", t.get('dob','')),
-        ("Kitambulisho (NIDA) / National ID", nid),
-        ("Jinsi / Gender", t.get('gender','')),
-        ("Simu / Phone", t.get('phone','')),
-        ("Barua Pepe / Email", t.get('email','')),
-        ("Anwani / Address", addr),
-        ("Hali ya Ndoa / Marital Status", t.get('marital','')),
-        ("Dini / Religion", t.get('religion','')),
+    # ── SEHEMU 1: MWANDISHI ───────────────────────────────
+    sehemu("1. TAARIFA ZA MWANDISHI WA WOSIA")
+    safu_data = [
+        ("Jina Kamili", jina_kamili),
+        ("Tarehe ya Kuzaliwa", m.get('dob','')),
+        ("Kitambulisho (NIDA)", nida),
+        ("Jinsi", m.get('jinsi','')),
+        ("Simu", m.get('simu','')),
+        ("Barua Pepe", m.get('barua_pepe','')),
+        ("Anwani ya Makazi", anwani),
+        ("Hali ya Ndoa", m.get('hali_ndoa','')),
+        ("Dini", m.get('dini','')),
     ]
-    tbl_data = [[Paragraph(l, sLabel), Paragraph(v or "—", sVal)] for l, v in data_rows]
-    tbl = Table(tbl_data, colWidths=[5.5*cm, W-5.5*cm])
-    tbl.setStyle(TableStyle([
+    jedwali_data = [[Paragraph(l, s_lebo), Paragraph(v or "—", s_thamani)] for l, v in safu_data]
+    jedwali = Table(jedwali_data, colWidths=[5.5*cm, upana-5.5*cm])
+    jedwali.setStyle(TableStyle([
         ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("ROWBACKGROUNDS", (0,0), (-1,-1), [colors.white, LIGHT]),
-        ("GRID", (0,0), (-1,-1), 0.3, BORDER),
+        ("ROWBACKGROUNDS", (0,0), (-1,-1), [colors.white, RANGI_NYEPESI]),
+        ("GRID", (0,0), (-1,-1), 0.3, RANGI_MIPAKA),
         ("LEFTPADDING", (0,0), (-1,-1), 5),
         ("RIGHTPADDING", (0,0), (-1,-1), 5),
         ("TOPPADDING", (0,0), (-1,-1), 3),
         ("BOTTOMPADDING", (0,0), (-1,-1), 3),
     ]))
-    story.append(tbl)
+    hadithi.append(jedwali)
 
-    # ── SECTION 2: ASSETS ───────────────────────────────────
-    assets = d.get("assets", {})
-    section("MALI NA RASILIMALI", "ESTATE & ASSETS")
+    # ── SEHEMU 2: MALI ────────────────────────────────────
+    mali = d.get("mali", {})
+    sehemu("2. MALI NA RASILIMALI")
 
-    props = assets.get("properties", [])
-    if props:
-        story.append(Paragraph("A. Ardhi na Nyumba / Land & Property", S("sh2", fontName="Helvetica-Bold", fontSize=9, textColor=INK, spaceAfter=3)))
-        for i, p in enumerate(props, 1):
-            story.append(Paragraph(
-                f"{i}. <b>{p.get('prop-type','').upper()}</b> — Hati: {p.get('prop-title','—')} | "
-                f"Mahali: {p.get('prop-location','—')} | Thamani: TZS {p.get('prop-value','—')} | "
-                f"Mrithi: {p.get('prop-heir','—')}",
-                sBody
+    ardhi_orodha = mali.get("ardhi", [])
+    if ardhi_orodha:
+        hadithi.append(Paragraph("A. Ardhi na Nyumba", ST("h2a", fontName="Helvetica-Bold", fontSize=9, textColor=RANGI_INK, spaceAfter=3)))
+        for i, p in enumerate(ardhi_orodha, 1):
+            hadithi.append(Paragraph(
+                f"{i}. <b>{p.get('aina-ardhi','').upper()}</b> — Hati: {p.get('hati-ardhi','—')} | "
+                f"Mahali: {p.get('mahali-ardhi','—')} | Thamani: TZS {p.get('thamani-ardhi','—')} | "
+                f"Mrithi: {p.get('mrithi-ardhi','—')}",
+                s_mwili
             ))
 
-    banks = assets.get("banks", [])
-    if banks:
-        story.append(Paragraph("B. Akaunti za Benki / Bank Accounts", S("sh2b", fontName="Helvetica-Bold", fontSize=9, textColor=INK, spaceAfter=3, spaceBefore=6)))
-        for i, b in enumerate(banks, 1):
-            story.append(Paragraph(
-                f"{i}. <b>{b.get('bank-name','—')}</b> — Akaunti: {b.get('bank-acc','—')} | "
-                f"Tawi: {b.get('bank-branch','—')} | Mrithi: {b.get('bank-heir','—')}",
-                sBody
+    benki_orodha = mali.get("benki", [])
+    if benki_orodha:
+        hadithi.append(Paragraph("B. Akaunti za Benki", ST("h2b", fontName="Helvetica-Bold", fontSize=9, textColor=RANGI_INK, spaceAfter=3, spaceBefore=6)))
+        for i, b in enumerate(benki_orodha, 1):
+            hadithi.append(Paragraph(
+                f"{i}. <b>{b.get('jina-benki','—')}</b> — Akaunti: {b.get('namba-benki','—')} | "
+                f"Tawi: {b.get('tawi-benki','—')} | Mrithi: {b.get('mrithi-benki','—')}",
+                s_mwili
             ))
 
-    vehicles = assets.get("vehicles", [])
-    if vehicles:
-        story.append(Paragraph("C. Magari / Vehicles", S("sh2c", fontName="Helvetica-Bold", fontSize=9, textColor=INK, spaceAfter=3, spaceBefore=6)))
-        for i, v in enumerate(vehicles, 1):
-            story.append(Paragraph(
-                f"{i}. <b>{v.get('veh-model','—')}</b> ({v.get('veh-year','—')}) — "
-                f"Reg: {v.get('veh-reg','—')} | Mrithi: {v.get('veh-heir','—')}",
-                sBody
+    magari_orodha = mali.get("magari", [])
+    if magari_orodha:
+        hadithi.append(Paragraph("C. Magari", ST("h2c", fontName="Helvetica-Bold", fontSize=9, textColor=RANGI_INK, spaceAfter=3, spaceBefore=6)))
+        for i, v in enumerate(magari_orodha, 1):
+            hadithi.append(Paragraph(
+                f"{i}. <b>{v.get('aina-gari','—')}</b> ({v.get('mwaka-gari','—')}) — "
+                f"Usajili: {v.get('usajili-gari','—')} | Mrithi: {v.get('mrithi-gari','—')}",
+                s_mwili
             ))
 
-    other = assets.get("other", "")
-    if other:
-        story.append(Paragraph("D. Mali Nyingine / Other Assets", S("sh2d", fontName="Helvetica-Bold", fontSize=9, textColor=INK, spaceAfter=3, spaceBefore=6)))
-        story.append(Paragraph(other, sBody))
+    nyingine = mali.get("nyingine", "")
+    if nyingine:
+        hadithi.append(Paragraph("D. Mali Nyingine", ST("h2d", fontName="Helvetica-Bold", fontSize=9, textColor=RANGI_INK, spaceAfter=3, spaceBefore=6)))
+        hadithi.append(Paragraph(nyingine, s_mwili))
 
-    # ── SECTION 3: BENEFICIARIES ────────────────────────────
-    bens = d.get("beneficiaries", [])
-    section("WATEULE WA MIRATHI", "BENEFICIARIES")
-    if bens:
-        ben_data = [
-            [Paragraph(h, S(f"bh{i}", fontName="Helvetica-Bold", fontSize=8, textColor=INK))
-             for i, h in enumerate(["#", "Jina / Name", "Uhusiano / Rel.", "Mgawanyo / Share", "Kitambulisho / ID", "Simu / Phone"])]
-        ]
-        for i, b in enumerate(bens, 1):
-            ben_data.append([
-                Paragraph(str(i), sBody),
-                Paragraph(b.get("ben-name","—"), sBody),
-                Paragraph(b.get("ben-rel","—"), sBody),
-                Paragraph(f"{b.get('ben-share','—')}%", sBody),
-                Paragraph(b.get("ben-nid","—"), sBody),
-                Paragraph(b.get("ben-phone","—"), sBody),
+    # ── SEHEMU 3: WATEULE ─────────────────────────────────
+    wateule = d.get("wateule", [])
+    sehemu("3. WATEULE WA MIRATHI")
+    if wateule:
+        vichwa = [Paragraph(h, ST(f"wh{i}", fontName="Helvetica-Bold", fontSize=8, textColor=RANGI_INK))
+                  for i, h in enumerate(["#", "Jina", "Uhusiano", "Mgawanyo", "NIDA", "Simu"])]
+        jedwali_wateule = [vichwa]
+        for i, b in enumerate(wateule, 1):
+            jedwali_wateule.append([
+                Paragraph(str(i), s_mwili),
+                Paragraph(b.get("jina-mrithi","—"), s_mwili),
+                Paragraph(b.get("uhusiano-mrithi","—"), s_mwili),
+                Paragraph(f"{b.get('mgawanyo-mrithi','—')}%", s_mwili),
+                Paragraph(b.get("nida-mrithi","—"), s_mwili),
+                Paragraph(b.get("simu-mrithi","—"), s_mwili),
             ])
-        col_w = [0.6*cm, 3.8*cm, 2.5*cm, 2.2*cm, 3.5*cm, 3*cm]
-        bt = Table(ben_data, colWidths=col_w)
-        bt.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), RUST),
+        upana_safu = [0.6*cm, 3.8*cm, 2.5*cm, 2.2*cm, 3.5*cm, 3*cm]
+        jt = Table(jedwali_wateule, colWidths=upana_safu)
+        jt.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), RANGI_RUST),
             ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, LIGHT]),
-            ("GRID", (0,0), (-1,-1), 0.3, BORDER),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, RANGI_NYEPESI]),
+            ("GRID", (0,0), (-1,-1), 0.3, RANGI_MIPAKA),
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
             ("LEFTPADDING", (0,0), (-1,-1), 4),
             ("RIGHTPADDING", (0,0), (-1,-1), 4),
             ("TOPPADDING", (0,0), (-1,-1), 3),
             ("BOTTOMPADDING", (0,0), (-1,-1), 3),
         ]))
-        story.append(bt)
+        hadithi.append(jt)
     else:
-        story.append(Paragraph("Hakuna mrithi aliyeandikwa. / No beneficiaries recorded.", sBody))
+        hadithi.append(Paragraph("Hakuna mrithi aliyeandikwa.", s_mwili))
 
-    # ── SECTION 4: EXECUTOR ─────────────────────────────────
-    ex = d.get("executor", {})
-    gu = d.get("guardian", {})
-    section("MSIMAMIZI NA MDHAMINI", "EXECUTOR & GUARDIAN")
-    row("Msimamizi Mkuu / Primary Executor", f"{ex.get('name','—')}  |  Simu: {ex.get('phone','—')}  |  Uhusiano: {ex.get('rel','—')}  |  NIDA: {ex.get('nid','—')}")
-    row("Msimamizi Mbadala / Reserve Executor", f"{ex.get('reserve_name','—')}  |  Simu: {ex.get('reserve_phone','—')}")
-    if gu.get("name"):
-        row("Mdhamini wa Watoto / Children's Guardian", f"{gu.get('name','—')}  |  Uhusiano: {gu.get('rel','—')}  |  Simu: {gu.get('phone','—')}  |  NIDA: {gu.get('nid','—')}")
+    # ── SEHEMU 4: MSIMAMIZI ───────────────────────────────
+    ms = d.get("msimamizi", {})
+    md = d.get("mdhamini", {})
+    sehemu("4. MSIMAMIZI WA WOSIA NA MDHAMINI")
+    safu("Msimamizi Mkuu", f"{ms.get('jina','—')}  |  Simu: {ms.get('simu','—')}  |  Uhusiano: {ms.get('uhusiano','—')}  |  NIDA: {ms.get('nida','—')}")
+    safu("Msimamizi Mbadala", f"{ms.get('mbadala_jina','—')}  |  Simu: {ms.get('mbadala_simu','—')}")
+    if md.get("jina"):
+        safu("Mdhamini wa Watoto", f"{md.get('jina','—')}  |  Uhusiano: {md.get('uhusiano','—')}  |  Simu: {md.get('simu','—')}  |  NIDA: {md.get('nida','—')}")
 
-    # ── SECTION 5: WISHES ───────────────────────────────────
-    wishes = d.get("wishes", {})
-    section("MATAKWA MAALUM", "SPECIAL WISHES")
-    row("Maelekezo ya Mazishi / Funeral Instructions", wishes.get("funeral",""))
-    row("Sadaka / Charitable Donations", wishes.get("charity",""))
-    row("Masharti Maalum / Special Conditions", wishes.get("special",""))
-    row("Madeni ya Kulipwa / Debts to Settle", wishes.get("debts",""))
+    # ── SEHEMU 5: MATAKWA ─────────────────────────────────
+    mt = d.get("matakwa", {})
+    sehemu("5. MATAKWA MAALUM")
+    safu("Maelekezo ya Mazishi", mt.get("mazishi",""))
+    safu("Misaada ya Hisani / Sadaka", mt.get("sadaka",""))
+    safu("Masharti Maalum", mt.get("masharti",""))
+    safu("Madeni ya Kulipwa", mt.get("madeni",""))
 
-    # ── SECTION 6: WITNESSES ────────────────────────────────
-    wi = d.get("witnesses", {})
-    section("MASHAHIDI", "WITNESSES")
-    story.append(Paragraph(
+    # ── SEHEMU 6: MASHAHIDI ───────────────────────────────
+    sh = d.get("mashahidi", {})
+    sehemu("6. MASHAHIDI")
+    hadithi.append(Paragraph(
         "Wosia huu umesainiwa mbele ya mashahidi wafuatao wazima, ambao si wateule wa wosia huu, "
-        "kwa mujibu wa Kifungu cha 11 cha Law of Succession Act, Cap. 865.",
-        sBody
+        "kwa mujibu wa Kifungu cha 11 cha Sheria ya Mirathi, Cap. 865.",
+        s_mwili
     ))
-    story.append(Paragraph(
-        "This will was signed in the presence of the following adult witnesses, who are not beneficiaries "
-        "under this will, pursuant to Section 11 of the Law of Succession Act, Cap. 865.",
-        sBody
-    ))
-    row("Shahidi wa 1 / Witness 1", f"{wi.get('w1_name','—')}  |  NIDA: {wi.get('w1_nid','—')}")
-    row("Shahidi wa 2 / Witness 2", f"{wi.get('w2_name','—')}  |  NIDA: {wi.get('w2_nid','—')}")
+    safu("Shahidi wa 1", f"{sh.get('shahidi1_jina','—')}  |  NIDA: {sh.get('shahidi1_nida','—')}")
+    safu("Shahidi wa 2", f"{sh.get('shahidi2_jina','—')}  |  NIDA: {sh.get('shahidi2_nida','—')}")
 
-    # ── SIGNATURE BLOCK ─────────────────────────────────────
-    story.append(Spacer(1, 18))
-    story.append(HRFlowable(width=W, thickness=0.5, color=BORDER, spaceAfter=10))
+    # ── SAINI ─────────────────────────────────────────────
+    hadithi.append(Spacer(1, 18))
+    hadithi.append(HRFlowable(width=upana, thickness=0.5, color=RANGI_MIPAKA, spaceAfter=10))
 
-    col = W / 3
-    sig_data = [[
-        Paragraph("_______________________", sSigLbl),
-        Paragraph("_______________________", sSigLbl),
-        Paragraph("_______________________", sSigLbl),
-    ],[
-        Paragraph(f"<b>{full}</b>", sSigLbl),
-        Paragraph("<b>Wakili / Advocate</b>", sSigLbl),
-        Paragraph(f"<b>{wi.get('w1_name','Shahidi 1')}</b>", sSigLbl),
-    ],[
-        Paragraph("Mwandishi wa Wosia<br/>Testator", sSigLbl),
-        Paragraph("Jina: _________________<br/>Reg No: ________________<br/>Muhuri / Stamp:", sSigLbl),
-        Paragraph(f"Shahidi wa 1 / Witness 1<br/>NIDA: {wi.get('w1_nid','—')}", sSigLbl),
-    ],[
-        Paragraph("Tarehe: _______________", sSigLbl),
-        Paragraph("Tarehe: _______________", sSigLbl),
-        Paragraph("Tarehe: _______________", sSigLbl),
-    ]]
-    # add a 4th col for witness 2
-    for i, row_d in enumerate(sig_data):
-        row_d.append([
-            Paragraph("_______________________", sSigLbl),
-            Paragraph(f"<b>{wi.get('w2_name','Shahidi 2')}</b>", sSigLbl),
-            Paragraph(f"Shahidi wa 2 / Witness 2<br/>NIDA: {wi.get('w2_nid','—')}", sSigLbl),
-            Paragraph("Tarehe: _______________", sSigLbl),
-        ][i])
-
-    sig_tbl = Table(sig_data, colWidths=[col, col, col*0.55, col*0.45])
-    sig_tbl.setStyle(TableStyle([
+    safu_saini = [
+        [Paragraph("_______________________", s_saini), Paragraph("_______________________", s_saini),
+         Paragraph("_______________________", s_saini), Paragraph("_______________________", s_saini)],
+        [Paragraph(f"<b>{jina_kamili}</b>", s_saini), Paragraph("<b>Wakili / Advocate</b>", s_saini),
+         Paragraph(f"<b>{sh.get('shahidi1_jina','Shahidi 1')}</b>", s_saini),
+         Paragraph(f"<b>{sh.get('shahidi2_jina','Shahidi 2')}</b>", s_saini)],
+        [Paragraph("Mwandishi wa Wosia", s_saini),
+         Paragraph("Jina: _________________<br/>Namba ya Usajili: ________<br/>Muhuri:", s_saini),
+         Paragraph(f"Shahidi wa 1<br/>NIDA: {sh.get('shahidi1_nida','—')}", s_saini),
+         Paragraph(f"Shahidi wa 2<br/>NIDA: {sh.get('shahidi2_nida','—')}", s_saini)],
+        [Paragraph("Tarehe: _______________", s_saini), Paragraph("Tarehe: _______________", s_saini),
+         Paragraph("Tarehe: _______________", s_saini), Paragraph("Tarehe: _______________", s_saini)],
+    ]
+    upana_safu_saini = [upana/4] * 4
+    js = Table(safu_saini, colWidths=upana_safu_saini)
+    js.setStyle(TableStyle([
         ("VALIGN", (0,0), (-1,-1), "BOTTOM"),
         ("ALIGN", (0,0), (-1,-1), "CENTER"),
         ("TOPPADDING", (0,0), (-1,-1), 4),
         ("BOTTOMPADDING", (0,0), (-1,-1), 4),
     ]))
-    story.append(sig_tbl)
+    hadithi.append(js)
 
-    # ── LEGAL FOOTER ────────────────────────────────────────
-    story.append(Spacer(1, 14))
-    story.append(HRFlowable(width=W, thickness=0.5, color=BORDER, spaceAfter=6))
-    story.append(Paragraph(
-        "<b>Tangazo la Kisheria / Legal Disclaimer:</b> Hati hii imeandaliwa kwa msaada wa mfumo wa "
-        "kompyuta na inazingatia miongozo ya Law of Succession Act, Cap. 865 (Tanzania). Hata hivyo, "
-        "hati hii haina nguvu ya kisheria hadi itakaposainiwa mbele ya mashahidi wawili wazima na wakili "
-        "aliyesajiliwa na Tanganyika Law Society (au Zanzibar Law Society kwa wakazi wa Zanzibar).",
-        sLegal
-    ))
-    story.append(Paragraph(
-        "This document was prepared with computer system assistance and follows the Law of Succession Act, "
-        "Cap. 865 (Tanzania). It has no legal force until signed before two adult witnesses and an advocate "
-        "registered with the Tanganyika Law Society or Zanzibar Law Society. Legal counsel is strongly advised.",
-        sLegal
+    # ── TANGAZO LA KISHERIA ───────────────────────────────
+    hadithi.append(Spacer(1, 14))
+    hadithi.append(HRFlowable(width=upana, thickness=0.5, color=RANGI_MIPAKA, spaceAfter=6))
+    hadithi.append(Paragraph(
+        "<b>Tangazo la Kisheria:</b> Hati hii imeandaliwa kwa msaada wa mfumo wa kompyuta "
+        "na inazingatia miongozo ya Sheria ya Mirathi, Cap. 865 (Tanzania). Hata hivyo, "
+        "hati hii haina nguvu ya kisheria hadi itakaposainiwa mbele ya mashahidi wawili wazima "
+        "na wakili aliyesajiliwa na Tanganyika Law Society (au Zanzibar Law Society kwa wakazi "
+        "wa Zanzibar). Mshauri wa kisheria anashauriwa sana.",
+        s_kisheria
     ))
 
-    doc.build(story)
+    doc.build(hadithi)
 
 
 if __name__ == "__main__":
