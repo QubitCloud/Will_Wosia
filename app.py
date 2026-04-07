@@ -1,18 +1,65 @@
 from flask import Flask, render_template, request, jsonify, send_file
-import json, os, io
+import io
+import json
+import os
+import re
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 
 app = Flask(__name__)
 app.secret_key = "wosia-tz-2024"
 
 FOLDA_HIFADHI = "submissions"
+NAMNA_FAILI_ID = re.compile(r"^\d{8}_\d{12,}$")
 os.makedirs(FOLDA_HIFADHI, exist_ok=True)
+
+
+def pata_njia_ya_rekodi(faili_id):
+    if not NAMNA_FAILI_ID.fullmatch(faili_id):
+        return None
+    return os.path.join(FOLDA_HIFADHI, f"wosia_{faili_id}.json")
+
+
+def pakia_rekodi(faili_id):
+    njia = pata_njia_ya_rekodi(faili_id)
+    if not njia or not os.path.exists(njia):
+        return None
+    with open(njia, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def halali_data_ya_fomu(data):
+    if not isinstance(data, dict):
+        return False, "Data za fomu hazijatumwa kwa muundo sahihi."
+
+    sehemu_kuu = {
+        "mwandishi": dict,
+        "mali": dict,
+        "wateule": list,
+        "msimamizi": dict,
+        "mdhamini": dict,
+        "matakwa": dict,
+        "mashahidi": dict,
+    }
+    for jina, aina in sehemu_kuu.items():
+        if not isinstance(data.get(jina), aina):
+            return False, f"Sehemu ya '{jina}' haipo au si sahihi."
+
+    mwandishi = data["mwandishi"]
+    masharti_mwandishi = ("fname", "lname", "dob", "nid", "simu", "anwani")
+    kwa_kukosa = [jina for jina in masharti_mwandishi if not str(mwandishi.get(jina, "")).strip()]
+    if kwa_kukosa:
+        return False, "Taarifa muhimu za mwandishi hazijakamilika."
+
+    if not str(data["msimamizi"].get("jina", "")).strip():
+        return False, "Jina la msimamizi mkuu linahitajika."
+
+    return True, None
 
 
 @app.route("/")
@@ -28,26 +75,40 @@ def ukurasa_fomu():
 @app.route("/tuma", methods=["POST"])
 def pokea_fomu():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        sawa, kosa = halali_data_ya_fomu(data)
+        if not sawa:
+            return jsonify({"mafanikio": False, "kosa": kosa}), 400
+
         wakati = datetime.now().isoformat()
         faili_id = datetime.now().strftime("%Y%m%d_%H%M%S%f")
         rekodi = {"submitted_at": wakati, "data": data}
-        njia = os.path.join(FOLDA_HIFADHI, f"wosia_{faili_id}.json")
-        with open(njia, "w") as f:
+        njia = pata_njia_ya_rekodi(faili_id)
+        with open(njia, "w", encoding="utf-8") as f:
             json.dump(rekodi, f, indent=2, ensure_ascii=False)
-        return jsonify({"mafanikio": True, "faili_id": faili_id})
+        return jsonify({
+            "mafanikio": True,
+            "faili_id": faili_id,
+            "pdf_url": f"/pdf/{faili_id}",
+            "muhtasari_url": f"/muhtasari/{faili_id}",
+        })
     except Exception as e:
         return jsonify({"mafanikio": False, "kosa": str(e)}), 500
 
 
+@app.route("/muhtasari/<faili_id>")
+def ukurasa_muhtasari(faili_id):
+    rekodi = pakia_rekodi(faili_id)
+    if not rekodi:
+        return "Rekodi haikupatikana", 404
+    return render_template("review.html", record=rekodi, faili_id=faili_id)
+
 
 @app.route("/pdf/<faili_id>")
 def tengeneza_pdf(faili_id):
-    njia = os.path.join(FOLDA_HIFADHI, f"wosia_{faili_id}.json")
-    if not os.path.exists(njia):
+    rekodi = pakia_rekodi(faili_id)
+    if not rekodi:
         return "Rekodi haikupatikana", 404
-    with open(njia) as f:
-        rekodi = json.load(f)
     buffer = io.BytesIO()
     jenga_pdf_wosia(rekodi, buffer)
     buffer.seek(0)
